@@ -61,12 +61,12 @@ def aes_private_sharedlut(state,cipherKey,state_length,grcon,gsbox,gmul2,gmul3):
         key_expansion_device(cipherKey,s_expanded,s_rcon,s_sbox)
     
     #Prepare  local storage (per -thread)
-    state_local[i]= cuda.local.array(16, uint8)
+    state_local = cuda.local.array(16, uint8)
 
     #Load the block in to  local state if in range
     if index+16 < state_length:
         for i in range(16):
-            state_local=state[index+i]
+            state_local [i]=state[index+i]
     else:
         pass
         #can handle later if needed
