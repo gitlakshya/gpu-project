@@ -1,6 +1,10 @@
 from numba import cuda,uint8
 import numpy as np
 from encrypt.Aes_numba import aes_private_sharedlut
+from decrypt.Inv_aes import inv_AES
+# NUMBA_CUDA_PROFILE=1 python yourfile.py
+
+
 
 
 SBOX=np.array([
@@ -20,7 +24,7 @@ SBOX=np.array([
     	    0x70, 0x3E, 0xB5, 0x66, 0x48, 0x03, 0xF6, 0x0E, 0x61, 0x35, 0x57, 0xB9, 0x86, 0xC1, 0x1D, 0x9E,
     	    0xE1, 0xF8, 0x98, 0x11, 0x69, 0xD9, 0x8E, 0x94, 0x9B, 0x1E, 0x87, 0xE9, 0xCE, 0x55, 0x28, 0xDF,
     	    0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16
-        ], dtype=uint8)
+        ], dtype=np.uint8)
 INV_SBOX = np.array([
             0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38, 0xBF, 0x40, 0xA3, 0x9E, 0x81, 0xF3, 0xD7, 0xFB,
             0x7C, 0xE3, 0x39, 0x82, 0x9B, 0x2F, 0xFF, 0x87, 0x34, 0x8E, 0x43, 0x44, 0xC4, 0xDE, 0xE9, 0xCB,
@@ -38,7 +42,7 @@ INV_SBOX = np.array([
             0x60, 0x51, 0x7F, 0xA9, 0x19, 0xB5, 0x4A, 0x0D, 0x2D, 0xE5, 0x7A, 0x9F, 0x93, 0xC9, 0x9C, 0xEF,
             0xA0, 0xE0, 0x3B, 0x4D, 0xAE, 0x2A, 0xF5, 0xB0, 0xC8, 0xEB, 0xBB, 0x3C, 0x83, 0x53, 0x99, 0x61,
             0x17, 0x2B, 0x04, 0x7E, 0xBA, 0x77, 0xD6, 0x26, 0xE1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0C, 0x7D, 
-        ], dtype=uint8)
+        ], dtype=np.uint8)
 RCON  = np.array([
             0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a,
     	    0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39,
@@ -56,7 +60,7 @@ RCON  = np.array([
         	0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f, 0x5e, 0xbc, 0x63,
         	0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39, 0x72, 0xe4, 0xd3, 0xbd,
         	0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb, 0x8d
-        ], dtype=uint8)
+        ], dtype=np.uint8)
 MUL2 = np.array([
             0x00, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e,
         	0x20, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3a, 0x3c, 0x3e,
@@ -74,7 +78,7 @@ MUL2 = np.array([
         	0xbb, 0xb9, 0xbf, 0xbd, 0xb3, 0xb1, 0xb7, 0xb5, 0xab, 0xa9, 0xaf, 0xad, 0xa3, 0xa1, 0xa7, 0xa5,
         	0xdb, 0xd9, 0xdf, 0xdd, 0xd3, 0xd1, 0xd7, 0xd5, 0xcb, 0xc9, 0xcf, 0xcd, 0xc3, 0xc1, 0xc7, 0xc5,
         	0xfb, 0xf9, 0xff, 0xfd, 0xf3, 0xf1, 0xf7, 0xf5, 0xeb, 0xe9, 0xef, 0xed, 0xe3, 0xe1, 0xe7, 0xe5
-        ],dtype=uint8)
+        ],dtype=np.uint8)
 MUL3 = np.array([
             0x00, 0x03, 0x06, 0x05, 0x0c, 0x0f, 0x0a, 0x09, 0x18, 0x1b, 0x1e, 0x1d, 0x14, 0x17, 0x12, 0x11,
         	0x30, 0x33, 0x36, 0x35, 0x3c, 0x3f, 0x3a, 0x39, 0x28, 0x2b, 0x2e, 0x2d, 0x24, 0x27, 0x22, 0x21,
@@ -92,17 +96,19 @@ MUL3 = np.array([
         	0x6b, 0x68, 0x6d, 0x6e, 0x67, 0x64, 0x61, 0x62, 0x73, 0x70, 0x75, 0x76, 0x7f, 0x7c, 0x79, 0x7a,
         	0x3b, 0x38, 0x3d, 0x3e, 0x37, 0x34, 0x31, 0x32, 0x23, 0x20, 0x25, 0x26, 0x2f, 0x2c, 0x29, 0x2a,
         	0x0b, 0x08, 0x0d, 0x0e, 0x07, 0x04, 0x01, 0x02, 0x13, 0x10, 0x15, 0x16, 0x1f, 0x1c, 0x19, 0x1a
-        ],dtype=uint8)
+        ],dtype=np.uint8)
 
 class AES_encrypt_decrypt:
     def __init__(self):
 
         #pre-load lookup tables
-        self.sbox    = self.make_uint8_array(SBOX)
-        self.invsbox = self.make_uint8_array(INV_SBOX)
-        self.rcon    = self.make_uint8_array(RCON)
-        self.mul2    = self.make_uint8_array(MUL2)
-        self.mul3    = self.make_uint8_array(MUL3)
+        self.sbox     = (SBOX)
+        self.invsbox  = (INV_SBOX)
+        self.rcon     = (RCON)
+        self.mul2     = (MUL2)
+        self.mul3     = (MUL3)
+        self.invSbox  = (INV_SBOX)
+        # self.make_uint8_array(
 
     def encrypt_gpu(self,state,cipherkey,statelength,block_size=None):
 
@@ -135,18 +141,134 @@ class AES_encrypt_decrypt:
             blokDim = (block_size,1,1)
             gridDim = (grid_size,1,1)
 
+            start = cuda.event()
+            end = cuda.event()
+    
+            start.record()
             #Call kernel
             aes_private_sharedlut[gridDim,blokDim](
             d_state, d_cipherkey, nbytes,
             d_rcon, d_sbox,  d_mul2, d_mul3
         )
+            # wait for completion            
+            end.record()
+            end.synchronize()
+            time_ms = cuda.event_elapsed_time(start, end)
         
-        return d_state.copy_to_host()
+        return d_state.copy_to_host(),time_ms
+
+
+    def decrypt_gpu(self, state, cipherkey, statelength, block_size=None):
+
+        # ----------- PAD INPUT ------------
+        if statelength % 16 != 0:
+            pad = 16 - (statelength % 16)
+            state = np.concatenate([state, np.zeros(pad, dtype=np.uint8)])
+            statelength += pad
+
+        nbytes = statelength
+
+       
+        # ---------- COPY TO GPU ----------
+        d_state     = cuda.to_device(state)
+        d_cipherkey = cuda.to_device(cipherkey)
+        d_rcon      = cuda.to_device(self.rcon)
+        d_sbox      = cuda.to_device(self.sbox)
+        d_invsbox   = cuda.to_device(self.invSbox)
+        d_mul2      = cuda.to_device(self.mul2)
+        d_mul3      = cuda.to_device(self.mul3)
+
+        # ---------- GRID / BLOCK ----------
+        if block_size is None:
+            block_size = (statelength - 1)//16 + 1      # threads per block
+            grid_size  = 1
+
+            if block_size > 1024:
+                block_size = 1024
+                grid_size = (statelength - 1)//(1024*16) + 1
+            else:
+                grid_size = (statelength - 1)//(block_size*16) + 1
+        else:
+            grid_size = (statelength - 1)//(block_size*16) + 1
+
+        threads_per_block = block_size
+        blocks_per_grid   = grid_size
+
+        start = cuda.event()
+        end = cuda.event()
+
+        start.record()
+        # ------------ LAUNCH KERNEL -------------
+        inv_AES[blocks_per_grid, threads_per_block](
+            d_state,
+            d_cipherkey,
+            np.uint32(nbytes),
+            d_rcon,
+            d_sbox,
+            d_invsbox,
+            d_mul2,
+            d_mul3
+        )
+        
+        # (state,cipher_key,statelength,grcon,gsbox,ginvsbox,gmul2,gmul3):
+
+        end.record()
+        end.synchronize()
+
+        #Excution time
+        time_ms = cuda.event_elapsed_time(start, end)
+
+        # ------------ RETURN HOST RESULT ----------
+        return (d_state.copy_to_host(),time_ms)
+        
+def runthecode(text,cipherkey):
     
+    
+    # Convert to bytes
+    text_bytes = text.encode('utf-8')
+    cipherkey_bytes = cipherkey.encode('utf-8')
+    
+    # Convert to numpy uint8 arrays
+    state = np.frombuffer(text_bytes, dtype=np.uint8)
+    cipherkey_arr = np.frombuffer(cipherkey_bytes, dtype=np.uint8)
+    
+    # AES needs this:
+    statelength = len(state)
+    
+    
+    # print("state:", state)
+    # print("cipherkey:", cipherkey_arr)
+    # print("statelength:", statelength)
 
-test='1234567890123456'
-cipherkey='0987654321098765'
+    #Initialise the object
+    test_code =AES_encrypt_decrypt()
 
-test_code =AES_encrypt_decrypt()
+    #encrypt the code
+    result, execution_time_encrypt =test_code.encrypt_gpu(state,cipherkey_arr,statelength)
 
-test_code.encrypt_gpu()
+    #decrypt the cipher code 
+    decrypted, execution_time_decrypt=test_code.decrypt_gpu(result,cipherkey_arr,statelength)
+
+    plaintext_bytes = decrypted.astype(np.uint8).tobytes()
+
+    # Remove trailing zero padding
+    plaintext_bytes = plaintext_bytes.rstrip(b'\x00')
+    
+    plaintext = plaintext_bytes.decode('utf-8')
+
+    return plaintext,execution_time_encrypt,execution_time_decrypt
+
+    
+text="""In meteorology, a cyclone (/ˈsaɪ.kloʊn/) is a large air mass that rotates around a strong center of low atmospheric pressure, counterclockwise in the Northern Hemisphere and clockwise in the Southern Hemisphere as viewed from above (opposite to an anticyclone).[1][2] Cyclones are characterized by inward-spiraling winds that rotate about a zone of low pressure.[3][4]
+
+Cyclones have also been seen on planets other than the Earth, such as Mars, Jupiter, and Neptune.[5][6] Cyclogenesis is the process of cyclone formation and intensification.[7]
+
+Extratropical cyclones begin as waves in large regions of enhanced mid-latitude temperature contrasts called baroclinic zones. These zones contract and form weather fronts as the cyclonic circulation closes and intensifies. Later in their life cycle, extratropical cyclones occlude as cold air masses undercut the warmer air and become cold core systems. A cyclone's track is guided over the course of its 2 to 6 day life cycle by the steering flow of the subtropical jet stream.
+
+Weather fronts mark the boundary between two masses of air of different temperature, humidity, and densities, and are associated with the most prominent meteorological phenomena. Strong cold fronts typically feature narrow bands of thunderstorms and severe weather, and may on occasion be preceded by squall lines or dry lines. Such fronts form west of the circulation center and generally move from west to east; warm fronts form east of the cyclone center and are usually preceded by stratiform precipitation and fog. Warm fronts move poleward ahead of the cyclone path. Occluded fronts form late in the cyclone life cycle near the center of the cyclone and often wrap around the storm center. """
+
+cipherkey = '0987654321098765' 
+
+text,encrypt_time,decrypt_time=runthecode(text,cipherkey)
+
+print("The execution completed:\n\n encryption time -> {}\n \n decryption time -> {}\n \n decrypted message -> {}".format(encrypt_time,decrypt_time,text))

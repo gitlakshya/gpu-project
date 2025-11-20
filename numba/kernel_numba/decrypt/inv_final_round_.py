@@ -1,7 +1,7 @@
 from numba import cuda, uint8
 from encrypt.AddRoundkey  import add_round_key
-from inv_shift_rows_ import inv_shift_rows
-from inv_subbytes_ import inv_subbytes
+from decrypt.inv_shift_rows_ import inv_shift_rows
+from decrypt.inv_subbytes_ import inv_subbytes
 
 @cuda.jit(device=True)
 def inv_final_round(block,roundkey,invsbox):

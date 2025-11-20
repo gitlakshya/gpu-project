@@ -10,9 +10,7 @@ def RotByte(word):
     word[0]=word[1]
     word[1]=word[2]
     word[2]=word[3]
-    word[3]=word[4]
-    word[4]=temp
-
+    word[3]=temp
 # SubByte: applies S-box to 4 bytes
 @cuda.jit(device=True)
 def SubByte(word,sbox):

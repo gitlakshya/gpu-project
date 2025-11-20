@@ -1,4 +1,5 @@
 from numba import cuda,uint8
+from encrypt.mix_columns_ import mix_columns
 
 @cuda.jit(device=True)
 def inv_mixcols(block, mul2,mul3): # mul3 is unused but kept for API consistency
@@ -19,3 +20,4 @@ def inv_mixcols(block, mul2,mul3): # mul3 is unused but kept for API consistency
         block [4* col + 1]^=v
         block [4* col + 2]^=u
         block [4* col + 3]^=v
+    mix_columns(block, mul2, mul3)   

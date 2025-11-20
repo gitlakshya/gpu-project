@@ -20,7 +20,7 @@ def add_round_key(block,roundkey):
     block[12]  ^= roundkey[12]
     block[13]  ^= roundkey[13]
     block[14]  ^= roundkey[14]
-    block[14]  ^= roundkey[15]
+    block[15]  ^= roundkey[15]
 
 
 # -----------------------------------------
