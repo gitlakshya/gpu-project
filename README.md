@@ -14,6 +14,7 @@ This implementation showcases:
 
 - `AES_CPU_GPU_Comparison.ipynb` - Jupyter notebook with complete implementation and benchmarks (Google Colab compatible)
 - `aes_benchmark.py` - Python script version for command-line execution
+- `examples.py` - Quick start examples demonstrating various use cases
 - `README.md` - This file
 
 ## Requirements
@@ -43,7 +44,11 @@ pip install numpy matplotlib
 ### Using Python Script
 
 ```bash
+# Run benchmarks
 python aes_benchmark.py
+
+# Run examples
+python examples.py
 ```
 
 This will:
