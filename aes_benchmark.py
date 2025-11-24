@@ -242,6 +242,9 @@ if GPU_AVAILABLE:
         
         def __init__(self, key: np.ndarray):
             """Initialize with a 16-byte key"""
+            # Store original key
+            self.key = key.astype(np.uint8)
+            
             # Use CPU implementation for key expansion
             cpu_aes = AES_CPU(key)
             self.round_keys = cpu_aes.round_keys
@@ -249,6 +252,9 @@ if GPU_AVAILABLE:
             # Copy lookup tables to GPU
             self.d_sbox = cp.array(SBOX)
             self.d_inv_sbox = cp.array(INV_SBOX)
+            
+            # Pre-allocate all round keys on GPU
+            self.d_round_keys = [cp.array(self.round_keys[i]) for i in range(11)]
         
         def encrypt(self, data: np.ndarray) -> Tuple[np.ndarray, float]:
             """Encrypt data using GPU vectorized operations"""
@@ -272,55 +278,41 @@ if GPU_AVAILABLE:
             d_state = d_blocks.reshape(n_blocks, 4, 4)
             
             # Initial AddRoundKey
-            d_round_key = cp.array(self.round_keys[0])
-            d_state = d_state ^ d_round_key[None, :, :]
+            d_state = d_state ^ self.d_round_keys[0][None, :, :]
             
-            # Main rounds
+            # Main rounds - using CPU operations since GPU doesn't have proper GF multiplication
+            # Note: For production, implement proper GF multiplication tables on GPU
             for round_num in range(1, 10):
                 # SubBytes
                 d_state = self.d_sbox[d_state]
                 
-                # ShiftRows
-                d_state_shifted = cp.zeros_like(d_state)
-                d_state_shifted[:, 0, :] = d_state[:, 0, :]
-                d_state_shifted[:, 1, :] = cp.roll(d_state[:, 1, :], -1, axis=1)
-                d_state_shifted[:, 2, :] = cp.roll(d_state[:, 2, :], -2, axis=1)
-                d_state_shifted[:, 3, :] = cp.roll(d_state[:, 3, :], -3, axis=1)
-                d_state = d_state_shifted
+                # ShiftRows (in-place using temporary)
+                temp = d_state.copy()
+                d_state[:, 1, :] = cp.roll(temp[:, 1, :], -1, axis=1)
+                d_state[:, 2, :] = cp.roll(temp[:, 2, :], -2, axis=1)
+                d_state[:, 3, :] = cp.roll(temp[:, 3, :], -3, axis=1)
                 
-                # MixColumns (simplified vectorized version)
-                d_state_mixed = cp.zeros_like(d_state)
-                for col in range(4):
-                    s0 = d_state[:, 0, col]
-                    s1 = d_state[:, 1, col]
-                    s2 = d_state[:, 2, col]
-                    s3 = d_state[:, 3, col]
-                    
-                    # Using XOR for simplified mix (not full GF multiplication)
-                    d_state_mixed[:, 0, col] = s0 ^ s1 ^ s2 ^ s3
-                    d_state_mixed[:, 1, col] = s0 ^ s1 ^ s2 ^ s3
-                    d_state_mixed[:, 2, col] = s0 ^ s1 ^ s2 ^ s3
-                    d_state_mixed[:, 3, col] = s0 ^ s1 ^ s2 ^ s3
-                d_state = d_state_mixed
+                # MixColumns - Use CPU for correct GF multiplication
+                # Convert to CPU, apply mix columns, convert back
+                state_cpu = cp.asnumpy(d_state)
+                for b in range(n_blocks):
+                    state_cpu[b] = self._mix_columns_cpu(state_cpu[b])
+                d_state = cp.array(state_cpu)
                 
                 # AddRoundKey
-                d_round_key = cp.array(self.round_keys[round_num])
-                d_state = d_state ^ d_round_key[None, :, :]
+                d_state = d_state ^ self.d_round_keys[round_num][None, :, :]
             
             # Final round (no MixColumns)
             d_state = self.d_sbox[d_state]
             
-            # ShiftRows
-            d_state_shifted = cp.zeros_like(d_state)
-            d_state_shifted[:, 0, :] = d_state[:, 0, :]
-            d_state_shifted[:, 1, :] = cp.roll(d_state[:, 1, :], -1, axis=1)
-            d_state_shifted[:, 2, :] = cp.roll(d_state[:, 2, :], -2, axis=1)
-            d_state_shifted[:, 3, :] = cp.roll(d_state[:, 3, :], -3, axis=1)
-            d_state = d_state_shifted
+            # ShiftRows (in-place using temporary)
+            temp = d_state.copy()
+            d_state[:, 1, :] = cp.roll(temp[:, 1, :], -1, axis=1)
+            d_state[:, 2, :] = cp.roll(temp[:, 2, :], -2, axis=1)
+            d_state[:, 3, :] = cp.roll(temp[:, 3, :], -3, axis=1)
             
             # AddRoundKey
-            d_round_key = cp.array(self.round_keys[10])
-            d_state = d_state ^ d_round_key[None, :, :]
+            d_state = d_state ^ self.d_round_keys[10][None, :, :]
             
             # End timing
             end.record()
@@ -332,10 +324,21 @@ if GPU_AVAILABLE:
             
             return result, gpu_time
         
+        def _mix_columns_cpu(self, state: np.ndarray) -> np.ndarray:
+            """Mix columns helper using CPU operations"""
+            result = np.zeros((4, 4), dtype=np.uint8)
+            for i in range(4):
+                s0, s1, s2, s3 = state[:, i]
+                result[0, i] = gmul(2, s0) ^ gmul(3, s1) ^ s2 ^ s3
+                result[1, i] = s0 ^ gmul(2, s1) ^ gmul(3, s2) ^ s3
+                result[2, i] = s0 ^ s1 ^ gmul(2, s2) ^ gmul(3, s3)
+                result[3, i] = gmul(3, s0) ^ s1 ^ s2 ^ gmul(2, s3)
+            return result
+        
         def decrypt(self, data: np.ndarray) -> Tuple[np.ndarray, float]:
-            """Decrypt data using GPU (uses CPU for simplicity)"""
-            # For this demo, use CPU for decryption
-            cpu_aes = AES_CPU(self.round_keys[0].flatten())
+            """Decrypt data using CPU (proper key usage)"""
+            # Use the original key for decryption
+            cpu_aes = AES_CPU(self.key)
             return cpu_aes.decrypt(data)
 
 
@@ -507,7 +510,7 @@ if __name__ == "__main__":
     print("Starting AES Performance Benchmark...")
     print("="*50)
     
-    # Test with data sizes from 10^1 to 10^7 bytes (limited for practical testing)
+    # Test with data sizes from 10^1 to 10^6 bytes (limited for practical testing)
     data_sizes = [10**i for i in range(1, 7)]  # 10, 100, 1K, 10K, 100K, 1M bytes
     
     benchmark_results = benchmark_aes(data_sizes)

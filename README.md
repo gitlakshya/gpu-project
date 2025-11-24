@@ -7,7 +7,7 @@ This project implements AES-128 encryption and decryption on both CPU and GPU, d
 This implementation showcases:
 - **CPU Implementation**: Pure Python/NumPy implementation of AES-128
 - **GPU Implementation**: CuPy-based GPU-accelerated version
-- **Performance Benchmarking**: Comparison across data sizes from 10¹ to 10⁸ bytes
+- **Performance Benchmarking**: Comparison across data sizes from 10¹ to 10⁶ bytes
 - **Visualization**: Graphs showing speedup and throughput improvements
 
 ## Files
@@ -92,7 +92,6 @@ Ciphertext
 - 10⁴ bytes (10 KB)
 - 10⁵ bytes (100 KB)
 - 10⁶ bytes (1 MB)
-- 10⁷ bytes (10 MB)
 
 ## Example Output
 
