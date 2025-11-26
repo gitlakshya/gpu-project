@@ -62,9 +62,9 @@ AES-128:
 
 - Each block is encrypted **independently**:
   
-  \[
+  $$
   C_i = E_k(P_i)
-  \]
+  $$
   
 - **Advantage:** Perfectly parallelizable → ideal for GPU experiments.
 - **Disadvantage:** Leaks patterns; not secure for real-world structured data.
@@ -79,15 +79,15 @@ In this context:
 
 Formally:
 
-\[
+$$
 \text{Throughput (bytes/s)} = \frac{\text{data size (bytes)}}{\text{execution time (seconds)}}
-\]
+$$
 
 For readability, results are usually reported in **MB/s**:
-\[
+$$
 \text{Throughput (MB/s)} =
 \frac{\text{data size (bytes)}}{\text{time (s)} \times 10^6}
-\]
+$$
 
 - Higher throughput ⇒ the system encrypts more data per second ⇒ **better performance**.
 - In your code, you computed:
@@ -101,9 +101,9 @@ mbps = throughput / 1e6            # MB/s
 
 To compare CPU and GPU performance, we use:
 
-
+$$
 Speedup=\frac{\text{ GPU throughput}}{ \text{ CPU throughput}}
-
+$$
 ​
 
   
@@ -226,9 +226,9 @@ For your best case (10 MB):
 
 Efficiency:
 
-\[
+$$
 \text{Efficiency} = \frac{8.3 \text{ MB/s}}{12000 \text{ MB/s}} \times 100 \approx 0.069\%
-\]
+$$
 
 So the GPU achieves **only ~0.07% of PCIe Gen3 x16 bandwidth**, which explains why the GPU efficiency plot appears nearly zero.
 
