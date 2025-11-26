@@ -84,9 +84,9 @@ $$
 $$
 
 For readability, results are usually reported in **MB/s**:
+
 $$
-\text{Throughput (MB/s)} =
-\frac{\text{data size (bytes)}}{\text{time (s)} \times 10^6}
+\text{Throughput (MB/s)} = \frac{\text{data size (bytes)}}{\text{time (s)} \times 10^6}
 $$
 
 - Higher throughput ⇒ the system encrypts more data per second ⇒ **better performance**.
