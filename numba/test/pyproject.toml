@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "crypto>=1.4.1",
+    "matplotlib>=3.10.7",
     "numba>=0.62.1",
     "numpy>=2.2.6",
     "pycryptodome>=3.23.0",
