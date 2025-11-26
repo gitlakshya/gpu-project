@@ -1,141 +1,366 @@
-## High-Performance AES-128 Block Cipher Implementation Using Numba
-Academic Research Report
-Author: CPU/GPU Research Student
-Project: Parallel AES Encryption using Numba
-Date: November 26, 2025
+# GPU-Accelerated AES-128 ECB Encryption Using Numba CUDA
+
+## Academic Report (ECB-Only Implementation)
+
+**Author:** M.Tech Student  
+**Project:** Parallel AES-128 Encryption using CUDA (Numba)  
+**Date:** November 2025  
+
+---
 
 ## Abstract
-This report presents a detailed analysis of a high-performance AES-128 block cipher implementation using Numba for CPU acceleration. The implementation leverages Numba’s JIT compilation to optimize core cryptographic routines, achieving significant speedups over pure Python baselines. The study evaluates Electronic Codebook (ECB) and Counter (CTR) modes, validates correctness against NIST test vectors, and benchmarks performance across a range of data sizes. The results provide insights into the tradeoffs between Python, Numba, and GPU-based approaches, and offer guidance for practical deployment of CPU-optimized cryptography.
 
-Keywords: AES, Numba, JIT Compilation, Parallel Cryptography, Block Cipher, Python Optimization, Performance Benchmarking
+This report presents a GPU-accelerated implementation of the AES-128 block cipher in Electronic Codebook (ECB) mode using Python, Numba CUDA, and a custom AES kernel. The goal is to compare the performance of a traditional CPU implementation (PyCryptodome AES-ECB) with a parallel GPU implementation that encrypts multiple 16-byte blocks concurrently.
+
+Benchmarks were conducted for plaintext sizes ranging from 10 bytes to 10 MB. While the GPU shows **up to ~50× speedup** over the CPU for the largest data size tested, the **absolute throughput remains low** relative to theoretical GPU or PCIe bandwidth, indicating underutilization of the hardware. This report analyses the implementation, the measurement methodology, the observed performance trends, and the reasons for low GPU efficiency.
+
+
+
+---
 
 ## 1. Introduction
+
 ### 1.1 Background
-The Advanced Encryption Standard (AES) is the global standard for symmetric-key encryption. While GPU acceleration is popular for large-scale cryptography, many real-world systems rely on CPUs. Python’s ease of use is offset by performance limitations, which Numba addresses by compiling Python code to fast machine code.
+
+AES-128 is a widely used symmetric block cipher standardized by NIST. It operates on 128-bit (16-byte) blocks with a 128-bit key over 10 rounds of nonlinear substitution, permutation, and mixing. While CPUs can encrypt data efficiently, modern GPUs provide massive thread-level parallelism that can be exploited to process many AES blocks simultaneously.
+
+Numba’s CUDA extension allows Python functions to be compiled and executed on NVIDIA GPUs, enabling researchers to prototype GPU algorithms quickly without writing low-level CUDA C/C++.
 
 ### 1.2 Motivation
-Performance Gap: Pure Python AES is slow; Numba can bridge the gap to C-level performance.
-Accessibility: Numba enables high-speed cryptography in Python without requiring C/C++ or CUDA expertise.
-Portability: CPU-based solutions are universally deployable, including on systems without GPUs.
-1.3 Research Objectives
-Quantify the performance gains of Numba-accelerated AES-128 over pure Python.
-Validate correctness against NIST standards.
-Compare scaling and efficiency with GPU-based approaches.
-Identify bottlenecks and optimization opportunities for CPU cryptography.
+
+The motivation for this work is:
+
+1. To explore how much **speedup** can be obtained by offloading AES-128 ECB encryption to a GPU using Numba CUDA.
+2. To study how performance **scales with data size**.
+3. To understand **why GPU utilization (efficiency) is currently low**, and what that implies for optimization.
+
+### 1.3 Objectives
+
+This experiment focuses on:
+
+- Implementing **AES-128 ECB encryption and decryption** on both CPU and GPU.
+- Measuring **encryption/decryption time and throughput** for different input sizes.
+- Computing **speedup (GPU/CPU)** and plotting performance trends.
+- Discussing reasons for low GPU efficiency and potential improvements.
+
+---
+
 ## 2. Theoretical Foundation
-### 2.1 AES-128 Algorithm Overview
-SubBytes: Non-linear S-Box substitution.
-ShiftRows: Row-wise permutation for diffusion.
-MixColumns: Galois Field matrix multiplication for intra-column mixing.
-AddRoundKey: XOR with expanded round keys.
-Key Expansion: Generates 11 round keys from the original 128-bit key.
-### 2.2 Modes of Operation
-ECB: Each block encrypted independently; parallelizable but insecure for patterned data.
-CTR: Counter mode; parallelizable, no padding, secure with unique nonces.
-### 2.3 Numba and Python Optimization
-Numba JIT: Compiles Python functions to machine code at runtime.
-Parallelization: Numba supports parallel loops, but for AES, block-level parallelism is typically handled externally.
-Vectorization: NumPy arrays and Numba’s support for array operations accelerate state transformations.
+
+### 2.1 AES-128 and ECB Mode (Short Overview)
+
+AES-128:
+
+- Block size: **128 bits** (16 bytes).
+- Key size: **128 bits**.
+- Rounds: **10** (SubBytes, ShiftRows, MixColumns, AddRoundKey).
+- Implementation in this project:
+  - CPU: PyCryptodome `AES.new(key, AES.MODE_ECB)`  
+  - GPU: Custom AES kernel implementing the same round structure.
+
+**ECB Mode (Electronic Codebook)**:
+
+- Each block is encrypted **independently**:
+  
+  \[
+  C_i = E_k(P_i)
+  \]
+  
+- **Advantage:** Perfectly parallelizable → ideal for GPU experiments.
+- **Disadvantage:** Leaks patterns; not secure for real-world structured data.
+- For this project, ECB is used **only as a performance benchmark mode**, not as a recommended production mode.
+
+### 2.2 What Is Throughput?
+
+
+In this context:
+
+> **Throughput** is how much data the system can encrypt per second.
+
+Formally:
+
+\[
+\text{Throughput (bytes/s)} = \frac{\text{data size (bytes)}}{\text{execution time (seconds)}}
+\]
+
+For readability, results are usually reported in **MB/s**:
+
+\[
+\text{Throughput (MB/s)} = \frac{\text{data size (bytes)}}{\text{time (s)} \times 10^6}
+\]
+
+- Higher throughput ⇒ the system encrypts more data per second ⇒ **better performance**.
+- In your code, you computed:
+
+```python
+throughput = size / encrypt_time   # bytes per second
+mbps = throughput / 1e6            # MB/s
+```
+
+### 2.3 Speedup Definition
+
+To compare CPU and GPU performance, we use:
+
+\[
+Speedup=\frac{\text{ GPU throughput}}{ \text{ CPU throughput}}
+
+\]	​
+
+  
+- Speedup > 1 ⇒ GPU faster than CPU.
+- Speedup < 1 ⇒ CPU faster (common for very small messages due to overhead).
+
 ## 3. Implementation Methodology
-### 3.1 Development Environment
-Language: Python 3.x
-Optimization: Numba (v0.59+)
-Baseline: Pure Python and NumPy
-Validation: PyCryptodome for reference
-Visualization: Matplotlib
-### 3.2 Implementation Architecture
-#### 3.2.1 Module Structure
-aes_numba.py: Contains all AES primitives and ECB/CTR logic, JIT-compiled with Numba.
-main.py: Test runner and benchmarking harness.
-#### 3.2.2 Optimization Strategies
-JIT Compilation: All core AES routines (_subbytes, _shiftrows, _mixcolumns, _addroundkey, _key_expansion, _encrypt_block) are decorated with @njit.
-Lookup Tables: S-Box and Galois multiplication tables precomputed as NumPy arrays.
-In-place Operations: Minimize memory allocations for state transformations.
-Batch Processing: ECB/CTR modes process multiple blocks in a loop for cache efficiency.
-#### 3.2.3 Example: Numba-Accelerated Block Encryption
-### 3.3 Validation Methodology
-NIST Test Vectors: Verified against FIPS 197 Appendix B.
-Round-Trip Testing: Ensured decryption recovers original plaintext.
-Cross-Implementation Consistency: Compared outputs with PyCryptodome and (optionally) GPU/CuPy results.
-### 3.4 Benchmarking Framework
-Data Sizes: 10¹ to 10⁷ bytes (10 B to 10 MB).
-Timing: Wall-clock time over multiple trials, averaged for stability.
-Metrics: Throughput (MB/s), speedup over pure Python, scaling behavior.
-## 4. Results and Analysis
-### 4.1 Validation Results
-NIST Compliance: All test vectors passed.
-Round-Trip: Encryption and decryption are bit-exact.
-Cross-Platform: Outputs match PyCryptodome and GPU implementations for identical inputs.
-### 4.2 Performance Benchmarking
-| Data Size	|  Pure Python (MB/s)| Numba (MB/s)	|Speedup  |
-|-----------|--------------------|--------------|-------- | 
-|10 B	    |0.001	             |0.01	        | 10x     |
-|100 B	    |0.01	             |0.1	        | 10x     |
-|1 KB	    |0.1	             |1.2	        | 12x     |
-|10 KB	    |0.9	             |10.5	        | 11.7x   |
-|100 KB	    |8.5	             |98.2	        | 11.5x   |
-|1 MB	    |82.1	             |950.3	        | 11.6x   |
-|10 MB	    |800.2	             |9,200.1	    | 11.5x   |   
-Observations:
 
-Numba achieves 10-12x speedup over pure Python across all data sizes.
-Throughput scales linearly with data size, limited by CPU cache and memory bandwidth for large inputs.
-For small data, function call and JIT overheads are non-negligible.
-### 4.3 Bottleneck Analysis
-Small Data: Overhead of JIT and Python function calls.
-Large Data: Memory bandwidth and cache locality.
-Parallelization: Further speedup possible with multiprocessing for batch encryption.
-5. Discussion
-### 5.1 Performance Interpretation
-Numba closes the gap between Python and C for cryptographic workloads.
-Linear scaling observed for data sizes up to several MB.
-CPU remains preferable for small, latency-sensitive tasks or when GPU is unavailable.
-### 5.2 Practical Implications
-Ideal Use Cases: File encryption, batch processing, systems without GPU.
-Not Suitable For: Ultra-high-throughput scenarios where GPU acceleration is available.
-### 5.3 Security Considerations
-Side-Channel Attacks: Numba does not guarantee constant-time execution; production use should consider hardened libraries.
-ECB Mode: Used for benchmarking; not secure for real data.
-### 5.4 Optimization Opportunities
-Parallel Batch Processing: Use Numba’s parallel features or Python multiprocessing for multi-core CPUs.
-SIMD Vectorization: Explore Numba’s support for SIMD instructions.
-Cache Optimization: Block-wise processing to maximize cache hits.
-## 6. Future Work
-AES-192/256 Support: Extend key schedule and rounds.
-Authenticated Modes: Implement GCM or CCM.
-Hybrid CPU-GPU: Dynamically select backend based on data size and hardware.
-Constant-Time Kernels: Investigate side-channel resistance.
-## 7. Conclusion
-The Numba-accelerated AES-128 implementation delivers an order-of-magnitude speedup over pure Python, making high-performance cryptography accessible in Python environments without requiring GPUs. While not matching the raw throughput of GPU-based solutions, Numba provides a practical, portable, and easy-to-integrate option for many real-world applications.
+### 3.1 Environment
 
-References
-NIST FIPS 197 (2001). Advanced Encryption Standard (AES).
-Numba Documentation (2025). Numba: JIT compiler for Python.
-PyCryptodome Documentation (2025). Python Cryptography Toolkit.
-Python Software Foundation (2025). Python 3.x Documentation.
-## Appendix A: Implementation Statistics
-Total Lines of Code: ~300 (Numba AES + test runner)
-Validation Coverage: 100% NIST test vectors, round-trip tests
-Peak Throughput: ~9.2 GB/s (10 MB ECB, Numba, modern CPU)
-## Appendix B: Reproducing Results
-System Requirements
-Python 3.8+
-Numba 0.59+
-NumPy 2.x+
-Matplotlib (for visualization)
-Execution Instructions
-## Appendix C: Mathematical Derivations
-See main text for Galois Field arithmetic and key expansion logic.
-## Appendix D: Acronyms and Terminology
-Acronym	Full Form	Description
-AES	Advanced Encryption Standard	Symmetric cipher
-ECB	Electronic Codebook Mode	Block cipher mode
-JIT	Just-In-Time Compilation	Runtime code generation
-S-Box	Substitution Box	Non-linear transformation
-NIST	National Institute of Standards	US standards body
-Document Version: 1.0
-Last Updated: November 26, 2025
-Word Count: ~2,000 words
-Document Status: Final Research Report
+- Language: Python 3.x
+- CPU AES: PyCryptodome (AES.MODE_ECB)
+- GPU AES: Numba CUDA kernel (aes_private_sharedlut)
+- Timing: time.perf_counter() around encrypt/decrypt calls
+- Plotting: Matplotlib
+- Padding: Plaintext padded to a multiple of 16 bytes for GPU kernel (AES block size).
 
-This report was prepared as part of a research project on high-performance cryptography in Python. For production use, consult security professionals regarding side-channel resistance and compliance requirements.
+### 3.2 CPU Implementation (Summary)
+
+``` python
+cipher = AES.new(key, AES.MODE_ECB)
+ciphertext, encrypt_time_cpu = cipher.encrypt(plaintext)
+plaintext_cpu, decrypt_time_cpu = cipher.decrypt(ciphertext)
+```
+
+- Encrypts using a well-tested library.
+- Suitable baseline for comparison.
+- Processes data sequentially (one block at a time internally).
+
+### 3.3 GPU Implementation (Summary)
+
+``` python
+result_gpu, encrypt_time_gpu = test_code.encrypt_gpu(state, cipherkey_arr, statelength)
+decrypted_gpu, decrypt_time_gpu = test_code.decrypt_gpu(result_gpu, cipherkey_arr, statelength)
+```
+
+*** Key traits: ***
+
+- state is a uint8 array of the plaintext bytes.
+- Each GPU thread typically processes one AES block (16 bytes).
+- blocks_per_grid and threads_per_block determine how many blocks are processed in parallel.
+- Kernel uses shared/constant lookup tables (S-box, Rcon, multiplication tables) stored on device.
+
+### 3.4 Benchmarking Loop
+Data sizes tested:
+```python
+data_sizes = [10, 100, 1000, 10_000, 100_000, 1_000_000, 10_000_000]
+```
+For each size:
+
+- Generate random ASCII plaintext of length size.
+- Pad to a multiple of 16 bytes for AES.
+- Run 3 trials:
+- Call runthecode(plaintext, cipherkey) which:
+- Encrypts on CPU & GPU.
+- Decrypts on CPU & GPU.
+- Returns cpu_encrypt_time, gpu_encrypt_time, cpu_decrypt_time, gpu_decrypt_time.
+- Average times across trials.
+- Compute throughput: size / time (bytes/s).
+- Store results in ecb_results for plotting.
+
+## 4. Experimental Results
+
+### 4.1 Raw Results (ECB Only)
+ecb_results dictionary:
+
+```python
+ecb_results = {
+    'sizes':   [10,   100,   1000,   10000,    100000,     1000000,     10000000],
+    'cpu_enc': [700.23, 7745.73, 77722.22, 427119.22, 783373.68, 576050.47, 168005.41],
+    'cpu_dec': [707.01, 8254.68, 59421.24, 427941.74, 918799.56, 703897.53, 534320.65],
+    'gpu_enc': [66.30, 726.86, 8316.33, 79760.08, 629532.62, 3772180.36, 8338002.72],
+    'gpu_dec': [53.82, 738.19, 7239.94, 72170.90, 639582.47, 3183361.70, 7186771.61]
+}
+
+```
+note:Units: the values above are bytes per second (throughput), not MB/s.
+For MB/s, divide by 1e6.
+
+### 4.2 Throughput Table (Approximate MB/s)
+
+| Data Size (bytes) | CPU Enc (MB/s) | GPU Enc (MB/s) | Speedup (GPU/CPU) |
+| ----------------- | -------------- | -------------- | ----------------- |
+| 10                | 0.000001       | 0.00000007     | ~0.09×            |
+| 100               | 0.000008       | 0.0000007      | ~0.09×            |
+| 1,000             | 0.000078       | 0.000008       | ~0.11×            |
+| 10,000            | 0.000427       | 0.000080       | ~0.19×            |
+| 100,000           | 0.000783       | 0.000630       | ~0.80×            |
+| 1,000,000         | 0.000576       | 0.003772       | ~6.5×             |
+| 10,000,000        | 0.000168       | 0.008338       | ~49.6×            |
+
+### 4.3 GPU Speedup vs Data Size
+
+- For very small data sizes (10–100 bytes):
+   - Speedup < 1 ⇒ CPU is faster.
+   - GPU is hurt by kernel launch overhead and data transfer overhead.
+
+- Around 100 KB, GPU is roughly comparable to CPU.
+- From 1 MB onward, GPU becomes significantly faster:
+   - ~6.5× at 1 MB
+   - ~50× at 10 MB
+
+This aligns with expectations: GPU becomes advantageous when enough parallel work is available to amortize overheads.
+
+## 5. GPU Efficiency and “Why Is the Plot ~0?”
+
+``` python
+theoretical_peak = 12000  # MB/s (PCIe Gen3 x16)
+ecb_gpu_efficiency = [x / (theoretical_peak * 1e6) * 100 for x in ecb_results['gpu_enc']]
+```
+
+Here:
+
+- **x** is throughput in bytes/s.
+- **theoretical_peak × 1e6** = `12000 × 1e6` bytes/s = **12 GB/s**.
+
+For your best case (10 MB):
+
+- GPU throughput ≈ `8.3e6` bytes/s = **8.3 MB/s**
+
+Efficiency:
+
+\[
+\text{Efficiency} = \frac{8.3 \text{ MB/s}}{12000 \text{ MB/s}} \times 100 \approx 0.069\%
+\]
+
+So the GPU achieves **only ~0.07% of PCIe Gen3 x16 bandwidth**, which explains why the GPU efficiency plot appears nearly zero.
+
+
+## 5. Discussion
+
+### 5.1 Why Is GPU Efficiency “Not Up to the Mark”?
+
+From your measurements:
+
+- **Max GPU throughput ≈ 8.3 MB/s** (at 10 MB input)
+- **PCIe Gen3 x16 theoretical ≈ 12,000 MB/s**
+
+This means the GPU is operating at **far below 1% of the PCIe bandwidth**.  
+Although this looks disappointing, it is **expected** for several reasons:
+
+#### **1. Python + Numba Overhead**
+- Kernel launches from Python are slow.
+- Numba’s JIT compilation and dispatcher create extra latency.
+- This overhead dominates when AES work per thread is small.
+
+#### **2. Kernel Configuration / Grid Size**
+- With small or medium inputs, `blocks_per_grid` is small → many SMs sit idle.
+- Even at larger sizes, GPU occupancy may be suboptimal due to:
+  - Low threads per block
+  - Non-coalesced memory accesses
+  - Underutilized warp execution
+
+#### **3. Memory Access Patterns**
+- AES relies heavily on lookup tables (S-box, mul tables).
+- If these are stored in **global memory** instead of shared/constant memory:
+  - Each lookup becomes expensive
+  - Memory latency stalls throughput
+  
+#### **4. Data Transfer Overhead**
+- PCIe host ↔ device transfers are slow relative to computation.
+- For a 10 MB message, transfer + kernel launch time overwhelms useful work.
+- Consequently, throughput is capped by transfer cost, not computation.
+
+#### **5. Non-Vectorized Plaintext Handling**
+- Converting strings to arrays, padding them, and copying to GPU for each trial
+  adds overhead not present in highly optimized AES libraries.
+- These preprocessing steps inflate the total execution time.
+
+---
+
+### 5.2 When Is GPU Still Worth It?
+
+Even with low absolute throughput, your results show:
+
+- **~50× speedup** at the 10 MB scale (GPU vs CPU)
+
+This is a strong indication that:
+
+- The GPU accelerates AES significantly when enough parallel work exists.
+- In many scenarios (large files, bulk encryption), **relative speedup** is more important than absolute bandwidth utilization.
+- Peak theoretical PCIe bandwidth is rarely achievable for compute-bound kernels like AES.
+
+In summary, while your GPU efficiency is low relative to hardware limits,  
+**the GPU still provides substantial performance gains for large inputs**,  
+making it practically valuable despite low PCIe utilization.
+
+
+## 6. Limitations and Future Work
+
+### 6.1 Limitations
+
+The current implementation has the following limitations:
+
+- Only **ECB mode** is implemented and benchmarked.
+- No systematic **validation against NIST AES-128 test vectors**.
+- GPU kernel is **not heavily optimized**, specifically:
+  - No shared-memory storage for S-box or multiplication tables
+  - No kernel fusion
+  - Possibly low occupancy and non-coalesced memory access
+- Timings include significant **Python overhead**, and the pure kernel runtime is not isolated.
+
+---
+
+### 6.2 Future Improvements
+
+#### **Validation**
+
+- Add **NIST AES-128 test vectors** to verify correctness.
+- Add round-trip verification:
+  ```python
+  decrypt(encrypt(plaintext)) == plaintext
+  ```
+#### **Kernel Optimization**
+- Move lookup tables (S-box, mul2, mul3, etc.) into shared or constant memory.
+- Improve thread/block mapping for better occupancy.
+- Ensure coalesced loads/stores of 16-byte blocks.
+#### **Throughput Improvements**
+- Use larger batch sizes or process multiple blocks per thread.
+- Minimize host↔device transfers by reusing device buffers.
+### Separate Timing Components
+
+To better understand performance bottlenecks, measure the following individually:
+
+- **Host → Device copy time**
+- **Kernel execution time**
+- **Device → Host copy time**
+
+Breaking down timing in this way helps identify whether data transfer or computation is the dominant bottleneck.
+
+---
+
+### Enhanced Metrics
+
+For clearer performance analysis, also report:
+
+- **Absolute throughput** (MB/s)
+- **Speedup compared to CPU**
+- **Relative GPU efficiency**, normalized to your highest observed GPU throughput (as you already plot now)
+
+## 8. Conclusion
+
+This project implemented AES-128 ECB mode on both the CPU (via PyCryptodome) and the GPU (via Numba CUDA).  
+Benchmarking across data sizes from **10 bytes up to 10 MB** revealed several key insights:
+
+- **Very small inputs (10–100 bytes)** run faster on the CPU due to:
+  - Python overhead
+  - GPU kernel launch latency
+- Around **100 KB**, GPU performance becomes roughly comparable to the CPU.
+- At **10 MB**, the GPU achieves approximately **50× speedup** over the CPU.
+- However, the **absolute GPU throughput (~8.3 MB/s)** remains far below the theoretical **PCIe Gen3 ×16 limit (12,000 MB/s)**.
+
+From these observations:
+
+- Your conclusion that **GPU efficiency is not up to the mark** (when compared to PCIe bandwidth) is accurate.
+- Despite low absolute throughput, the **relative speedup is strong**, making GPU acceleration valuable for **large-scale encryption tasks**, where high parallelism can be exploited.
+
+Overall, this experiment forms a solid foundation. With additional validation, deeper kernel optimization, and more refined benchmarking (including isolated kernel timing), the implementation can be significantly improved and developed into work suitable for **academic publication or a thesis chapter**.
+
+
