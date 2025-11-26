@@ -84,9 +84,9 @@ Formally:
 \]
 
 For readability, results are usually reported in **MB/s**:
-
 \[
-\text{Throughput (MB/s)} = \frac{\text{data size (bytes)}}{\text{time (s)} \times 10^6}
+\text{Throughput (MB/s)} =
+\frac{\text{data size (bytes)}}{\text{time (s)} \times 10^6}
 \]
 
 - Higher throughput ⇒ the system encrypts more data per second ⇒ **better performance**.
@@ -101,10 +101,10 @@ mbps = throughput / 1e6            # MB/s
 
 To compare CPU and GPU performance, we use:
 
-\[
+
 Speedup=\frac{\text{ GPU throughput}}{ \text{ CPU throughput}}
 
-\]	​
+​
 
   
 - Speedup > 1 ⇒ GPU faster than CPU.
@@ -364,3 +364,110 @@ From these observations:
 Overall, this experiment forms a solid foundation. With additional validation, deeper kernel optimization, and more refined benchmarking (including isolated kernel timing), the implementation can be significantly improved and developed into work suitable for **academic publication or a thesis chapter**.
 
 
+## Appendix
+
+### Appendix A — System Specifications
+
+#### Hardware
+- **CPU:** (Specify your processor model)
+- **GPU:** NVIDIA GPU with CUDA support  
+- **GPU Compute Capability:** (e.g., 6.1, 7.5, etc.)
+- **Memory:** (e.g., 16 GB RAM)
+- **PCIe Interface:** PCIe Gen3 ×16
+
+#### Software
+- **Operating System:** (e.g., Ubuntu 22.04 / Windows / Kaggle Notebook)
+- **Python Version:** 3.x
+- **Numba Version:** (e.g., 0.60+)
+- **CUDA Toolkit:** (as supported by Numba)
+- **PyCryptodome Version:** Latest stable
+- **Numpy Version:** 2.x
+
+### Appendix B — Benchmark Data (ECB Mode)
+
+#### Stored Results (ecb_results)
+
+{
+  'sizes':    [10, 100, 1000, 10000, 100000, 1000000, 10000000],
+  'cpu_enc':  [700.23, 7745.73, 77722.22, 427119.22, 783373.68, 576050.47, 168005.41],
+  'cpu_dec':  [707.01, 8254.68, 59421.24, 427941.74, 918799.56, 703897.53, 534320.65],
+  'gpu_enc':  [66.30, 726.86, 8316.33, 79760.08, 629532.62, 3772180.36, 8338002.72],
+  'gpu_dec':  [53.82, 738.19, 7239.94, 72170.90, 639582.47, 3183361.70, 7186771.61]
+}
+
+### Appendix C — Throughput Formulas
+
+#### Byte-Level Throughput
+$$
+\text{Throughput}_{\text{bytes/s}} =
+\frac{\text{Data Size (bytes)}}{\text{Execution Time (seconds)}}
+$$
+
+#### Megabytes-per-second Throughput
+$$
+\text{Throughput}_{\text{MB/s}} =
+\frac{\text{Data Size (bytes)}}{\text{Execution Time (seconds)} \times 10^6}
+$$
+
+### Appendix D — Speedup Formula
+
+#### Speedup (GPU vs CPU)
+$$
+\text{Speedup} =
+\frac{\text{Throughput}_{\text{GPU}}}{\text{Throughput}_{\text{CPU}}}
+$$
+
+### Appendix E — GPU Efficiency Formulas
+
+#### 1. Efficiency vs PCIe Bandwidth (Absolute Efficiency)
+
+PCIe Gen3 ×16 theoretical: 12 GB/s = 12000 MB/s
+
+$$
+\text{Efficiency}_{\text{absolute}} =
+\frac{\text{GPU Throughput (MB/s)}}{12000} \times 100
+$$
+
+
+#### 2. Relative GPU Efficiency (Based on Your Best Run)
+Let T_max = highest observed GPU throughput
+
+$$
+\text{Efficiency}_{\text{relative}} =
+\frac{T}{T_{\max}} \times 100
+$$
+
+
+### Appendix F — Example GPU Kernel Launch Pattern
+
+threads_per_block = 256
+blocks_per_grid = (num_blocks + threads_per_block - 1) // threads_per_block
+
+aes_ecb_encrypt_kernel[blocks_per_grid, threads_per_block](
+    d_state,
+    d_key,
+    num_blocks,
+    d_sbox,
+    d_mul2,
+    d_mul3,
+    d_rcon
+)
+
+## Appendix  — Known Bottlenecks (Summary)
+
+The following bottlenecks were identified in the current GPU-based AES-128 ECB implementation:
+
+- **Kernel launch latency**  
+  GPU kernels invoked from Python incur significant overhead, especially for small workloads.
+
+- **PCIe transfer cost dominating computation**  
+  Host↔Device memory transfers are slower than the AES computation itself, limiting throughput.
+
+- **Global memory S-box lookups**  
+  Lookup tables stored in global memory introduce high-latency accesses; shared or constant memory would be faster.
+
+- **Underutilization of Streaming Multiprocessors (SMs)**  
+  Small or poorly configured grid/block sizes lead to idle GPU cores and low occupancy.
+
+- **Python-level overhead**  
+  Numba JIT compilation, dispatcher overhead, and intermediate buffer conversions inflate total execution time.
