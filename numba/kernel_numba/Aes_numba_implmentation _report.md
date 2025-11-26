@@ -113,24 +113,23 @@ NIST FIPS 197 (2001). Advanced Encryption Standard (AES).
 Numba Documentation (2025). Numba: JIT compiler for Python.
 PyCryptodome Documentation (2025). Python Cryptography Toolkit.
 Python Software Foundation (2025). Python 3.x Documentation.
-Appendix A: Implementation Statistics
+## Appendix A: Implementation Statistics
 Total Lines of Code: ~300 (Numba AES + test runner)
 Validation Coverage: 100% NIST test vectors, round-trip tests
 Peak Throughput: ~9.2 GB/s (10 MB ECB, Numba, modern CPU)
-Appendix B: Reproducing Results
+## Appendix B: Reproducing Results
 System Requirements
 Python 3.8+
 Numba 0.59+
 NumPy 2.x+
 Matplotlib (for visualization)
 Execution Instructions
-Appendix C: Mathematical Derivations
+## Appendix C: Mathematical Derivations
 See main text for Galois Field arithmetic and key expansion logic.
-Appendix D: Acronyms and Terminology
+## Appendix D: Acronyms and Terminology
 Acronym	Full Form	Description
 AES	Advanced Encryption Standard	Symmetric cipher
 ECB	Electronic Codebook Mode	Block cipher mode
-CTR	Counter Mode	Block cipher mode
 JIT	Just-In-Time Compilation	Runtime code generation
 S-Box	Substitution Box	Non-linear transformation
 NIST	National Institute of Standards	US standards body
